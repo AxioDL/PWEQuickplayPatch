@@ -1,0 +1,1 @@
+PrimeAPI\script\BuildModule.py Source <DolPathHere> -o EditorQuickplay.rel -bootstrap_section 6 -bootstrap_address 0x80002600 -bootstrap_hook LCEnable

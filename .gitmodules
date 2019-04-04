@@ -1,0 +1,3 @@
+[submodule "PrimeAPI"]
+	path = PrimeAPI
+	url = https://github.com/arukibree/PrimeAPI
