@@ -2,6 +2,7 @@
 #include <Runtime/CArchitectureQueue.hpp>
 #include <Runtime/CMainFlow.hpp>
 #include <Runtime/CGameState.hpp>
+#include <Runtime/CPlayerState.hpp>
 #include <Runtime/CStateManager.hpp>
 #include <Runtime/CWorldState.hpp>
 #include <Runtime/World/CPlayer.hpp>
@@ -10,26 +11,29 @@
 #include <dolphin/dvd.h>
 #include <dolphin/os.h>
 
+// IMPORTANT NOTE: Most of the values, enums & structs declared here
+// are mirrored in Prime World Editor NDolphinIntegration.h.
+
 // Debug config file magic
 const uint32 gkDebugConfigMagic = 0x00BADB01;
 
 // Current quickplay version
-// Important note: This should match EQuickplayVersion::Current in Prime World Editor NDolphinIntegration.h
+// This should match EQuickplayVersion::Current in Prime World Editor
 const uint32 gkQuickplayVersion = 1;
 
 // Feature mask enum
-// Important note: This enum is mirrored in Prime World Editor NDolphinIntegration.h
 enum EQuickplayFeature
 {
     /** On boot, automatically load the area specified by WorldID and AreaID */
     kQF_JumpToArea          = 0x00000001,
     /** Spawn the player in the location specified by SpawnTransform */
     kQF_SetSpawnPosition    = 0x00000002,
+	/** Give the player all items on spawn */
+	kQF_GiveAllItems		= 0x00000004,
 };
 
 // Contains debug parameters for quickplay from the editor
 // This is a mix of user-selected options and context from the current editor state
-// Important note: This struct is mirrored in Prime World Editor NDolphinIntegration.h
 struct SQuickplayParms
 {
 	uint32 Magic;
@@ -45,7 +49,7 @@ SQuickplayParms gQuickplayParms;
 
 // Patches
 PATCH_SYMBOL(CMainFlow::AdvanceGameState(CArchitectureQueue&), Hook_CMainFlow_AdvanceGameState(CMainFlow*, CArchitectureQueue&));
-PATCH_SYMBOL(CPlayer::Teleport(const CTransform4f&, CStateManager&, bool), Hook_CPlayer_Teleport(CPlayer*, const CTransform4f&, CStateManager&, bool));
+PATCH_SYMBOL(CStateManager::InitializeState(uint, TAreaId, uint), Hook_CStateManager_InitializeState(CStateManager&, uint, TAreaId, uint));
 
 // Forward decls
 void LoadDebugParamsFromDisc();
@@ -163,20 +167,38 @@ void Hook_CMainFlow_AdvanceGameState(CMainFlow* pMainFlow, CArchitectureQueue& Q
 	}
 }
 
-void Hook_CPlayer_Teleport(CPlayer* pPlayer, const CTransform4f& Transform, CStateManager& StateMgr, bool ResetBallCam)
+void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAssetId, TAreaId AreaId, uint AreaAssetId)
 {
-	static bool sHasDoneInitialTeleport = false;
+	// This function runs when a world is being initialized for gameplay.
+	static bool sDoneFirstInit = false;	
+
+	// Allow the original function to run first before we execute custom logic
+	StateMgr.InitializeState(WorldAssetId, AreaId, AreaAssetId);
+	CStateManager::EInitPhase Phase = StateMgr.GetInitPhase();
 	
-	// Hook into CPlayer::Teleport() so we can initially spawn the player in an arbitrary location.
-	// The first time this function is called is from CStateManager::InitializeState().
-	if (!sHasDoneInitialTeleport &&
-		(gQuickplayParms.FeatureFlags && kQF_SetSpawnPosition))
+	if (!sDoneFirstInit && Phase == CStateManager::kInit_Done)
 	{
-		sHasDoneInitialTeleport = true;
-		pPlayer->Teleport(gQuickplayParms.SpawnTransform, StateMgr, ResetBallCam);
-	}
-	else
-	{
-		pPlayer->Teleport(Transform, StateMgr, ResetBallCam);
+		sDoneFirstInit = true;
+		
+		// Spawn the player in the location specified by SpawnTransform.
+		// This feature doesn't make much sense without JumpToArea, so we require that flag to be on too.
+		if ( (gQuickplayParms.FeatureFlags & kQF_JumpToArea) &&
+			 (gQuickplayParms.FeatureFlags & kQF_SetSpawnPosition) )
+		{
+			StateMgr.GetPlayer()->Teleport(gQuickplayParms.SpawnTransform, StateMgr, true);
+		}
+		
+		// Fill out all inventory values to capacity.
+		if (gQuickplayParms.FeatureFlags & kQF_GiveAllItems)
+		{
+			CPlayerState* pPlayerState = StateMgr.GetPlayerState();
+			for (uint ItemIdx = 0; ItemIdx < CPlayerState::kItem_Max; ItemIdx++)
+			{
+				CPlayerState::EItemType Item = (CPlayerState::EItemType) ItemIdx;
+				uint32 Max = gkPowerUpMaxValues[ItemIdx];
+				pPlayerState->ResetPowerUp(Item, Max);
+				pPlayerState->IncrPickUp(Item, Max);
+			}
+		}
 	}
 }
