@@ -1,11 +1,13 @@
 #include <PrimeAPI.h>
 #include <Runtime/CArchitectureQueue.hpp>
 #include <Runtime/CMainFlow.hpp>
+#include <Runtime/CGameArea.hpp>
 #include <Runtime/CGameState.hpp>
 #include <Runtime/CPlayerState.hpp>
 #include <Runtime/CStateManager.hpp>
 #include <Runtime/CWorldState.hpp>
 #include <Runtime/World/CPlayer.hpp>
+#include <Runtime/World/CWorld.hpp>
 #include <Math/CVector3f.hpp>
 #include <Math/CTransform4f.hpp>
 #include <dolphin/dvd.h>
@@ -19,7 +21,7 @@ const uint32 gkDebugConfigMagic = 0x00BADB01;
 
 // Current quickplay version
 // This should match EQuickplayVersion::Current in Prime World Editor
-const uint32 gkQuickplayVersion = 1;
+const uint32 gkQuickplayVersion = 2;
 
 // Feature mask enum
 enum EQuickplayFeature
@@ -41,6 +43,8 @@ struct SQuickplayParms
 	uint32 FeatureFlags;
 	uint32 BootWorldAssetID;
 	uint32 BootAreaAssetID;
+	uint32 __PADDING; // Explicit align to 64 bits
+	uint64 BootAreaLayerFlags;
 	CTransform4f SpawnTransform;
 };
 SQuickplayParms gQuickplayParms;
@@ -50,6 +54,7 @@ SQuickplayParms gQuickplayParms;
 // Patches
 PATCH_SYMBOL(CMainFlow::AdvanceGameState(CArchitectureQueue&), Hook_CMainFlow_AdvanceGameState(CMainFlow*, CArchitectureQueue&));
 PATCH_SYMBOL(CStateManager::InitializeState(uint, TAreaId, uint), Hook_CStateManager_InitializeState(CStateManager&, uint, TAreaId, uint));
+PATCH_SYMBOL(CGameArea::StartStreamIn(CStateManager&), Hook_CGameArea_StartStreamIn(CGameArea*, CStateManager&));
 
 // Forward decls
 void LoadDebugParamsFromDisc();
@@ -201,4 +206,27 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 			}
 		}
 	}
+}
+
+void Hook_CGameArea_StartStreamIn(CGameArea* pArea, CStateManager& StateMgr)
+{
+	static bool sFirstLoad = false;
+	
+	// Hook into the first time StartStreamIn is called to make sure that
+	// all layer flags we want enabled are set.
+	// This feature also requires JumpToArea enabled.
+	if (!sFirstLoad &&
+		(gQuickplayParms.FeatureFlags & kQF_JumpToArea))
+	{
+		sFirstLoad = true;
+		
+		CWorld* pWorld = StateMgr.GetWorld();
+		TAreaId AreaId = pWorld->GetAreaId(gQuickplayParms.BootAreaAssetID);
+		
+		CWorldState* pWorldState = gpGameState->CurrentWorldState();
+		CWorldLayerState* pWorldLayerState = pWorldState->GetWorldLayerState();
+		pWorldLayerState->areaLayers[AreaId].mLayerBits = gQuickplayParms.BootAreaLayerFlags;
+	}
+	
+	pArea->StartStreamIn(StateMgr);
 }
