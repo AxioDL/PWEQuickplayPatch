@@ -1,3 +1,4 @@
-[submodule "PrimeAPI"]
-	path = PrimeAPI
-	url = https://github.com/arukibree/PrimeAPI
+[submodule "prime-practice-native"]
+	path = prime-practice-native
+	url = https://github.com/MetroidPrimeModding/prime-practice-native
+	branch = cmake-rewrite
