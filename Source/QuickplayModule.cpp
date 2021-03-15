@@ -1,17 +1,22 @@
 #include <PrimeAPI.h>
-#include <Runtime/CArchitectureQueue.hpp>
-#include <Runtime/CMainFlow.hpp>
-#include <Runtime/CGameArea.hpp>
-#include <Runtime/CGameState.hpp>
-#include <Runtime/CPlayerState.hpp>
-#include <Runtime/CStateManager.hpp>
-#include <Runtime/CWorldState.hpp>
-#include <Runtime/World/CPlayer.hpp>
-#include <Runtime/World/CWorld.hpp>
-#include <Math/CVector3f.hpp>
-#include <Math/CTransform4f.hpp>
-#include <dolphin/dvd.h>
-#include <dolphin/os.h>
+
+#include <prime/CArchitectureQueue.hpp>
+#include <prime/CMainFlow.hpp>
+#include <prime/CGameArea.hpp>
+#include <prime/CGameState.hpp>
+#include <prime/CPlayerState.hpp>
+#include <prime/CStateManager.hpp>
+#include <prime/CWorldState.hpp>
+#include <prime/CPlayer.hpp>
+#include <prime/CWorld.hpp>
+#include <dvd.h>
+#include <os.h>
+
+extern "C" {
+void _prolog();
+void *memcpy(void *dest, const void *src, size_t count);
+}
+
 
 // IMPORTANT NOTE: Most of the values, enums & structs declared here
 // are mirrored in Prime World Editor NDolphinIntegration.h.
@@ -51,10 +56,6 @@ SQuickplayParms gQuickplayParms;
 
 #define QUICKPLAY_BUFFER_SIZE ((sizeof(SQuickplayParms) + 31) & ~31)
 
-// Patches
-PATCH_SYMBOL(CMainFlow::AdvanceGameState(CArchitectureQueue&), Hook_CMainFlow_AdvanceGameState(CMainFlow*, CArchitectureQueue&));
-PATCH_SYMBOL(CStateManager::InitializeState(uint, TAreaId, uint), Hook_CStateManager_InitializeState(CStateManager&, uint, TAreaId, uint));
-PATCH_SYMBOL(CGameArea::StartStreamIn(CStateManager&), Hook_CGameArea_StartStreamIn(CGameArea*, CStateManager&));
 
 // Forward decls
 void LoadDebugParamsFromDisc();
@@ -161,8 +162,9 @@ void Hook_CMainFlow_AdvanceGameState(CMainFlow* pMainFlow, CArchitectureQueue& Q
 		pMainFlow->GetGameState() == kCFS_PreFrontEnd)
 	{
 		sHasDoneInitialBoot = true;
-		gpGameState->SetCurrentWorldId( gQuickplayParms.BootWorldAssetID );
-		gpGameState->CurrentWorldState()->SetDesiredAreaAssetId( gQuickplayParms.BootAreaAssetID );
+		OSReport("Hook_CMainFlow_AdvanceGameState\n");
+		g_GameState->SetCurrentWorldId( gQuickplayParms.BootWorldAssetID );
+		g_GameState->CurrentWorldState().SetDesiredAreaAssetId( gQuickplayParms.BootAreaAssetID );
 		pMainFlow->SetGameState(kCFS_Game, Queue);
 		return;
 	}
@@ -184,6 +186,7 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 	if (!sDoneFirstInit && Phase == CStateManager::kInit_Done)
 	{
 		sDoneFirstInit = true;
+		OSReport("Hook_CStateManager_InitializeState\n");
 		
 		// Spawn the player in the location specified by SpawnTransform.
 		// This feature doesn't make much sense without JumpToArea, so we require that flag to be on too.
@@ -201,7 +204,7 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 			{
 				CPlayerState::EItemType Item = (CPlayerState::EItemType) ItemIdx;
 				uint32 Max = gkPowerUpMaxValues[ItemIdx];
-				pPlayerState->ResetPowerUp(Item, Max);
+				pPlayerState->ReInitializePowerUp(Item, Max);
 				pPlayerState->IncrPickUp(Item, Max);
 			}
 		}
@@ -219,13 +222,18 @@ void Hook_CGameArea_StartStreamIn(CGameArea* pArea, CStateManager& StateMgr)
 		(gQuickplayParms.FeatureFlags & kQF_JumpToArea))
 	{
 		sFirstLoad = true;
+
+		OSReport("Hook_CGameArea_StartStreamIn 1: %x\n", gQuickplayParms.BootAreaAssetID);
 		
 		CWorld* pWorld = StateMgr.GetWorld();
-		TAreaId AreaId = pWorld->GetAreaId(gQuickplayParms.BootAreaAssetID);
+		OSReport("Hook_CGameArea_StartStreamIn 2: %p\n", pWorld);
+
+		TAreaId areaId = pWorld->GetAreaId(gQuickplayParms.BootAreaAssetID);
+		OSReport("Hook_CGameArea_StartStreamIn 3: %d\n", areaId.id);
 		
-		CWorldState* pWorldState = gpGameState->CurrentWorldState();
-		CWorldLayerState* pWorldLayerState = pWorldState->GetWorldLayerState();
-		pWorldLayerState->areaLayers[AreaId].mLayerBits = gQuickplayParms.BootAreaLayerFlags;
+		CWorldLayerState* pWorldLayerState = *g_GameState->CurrentWorldState().layerState;
+		OSReport("Hook_CGameArea_StartStreamIn 4: %p\n", pWorldLayerState);
+		pWorldLayerState->areaLayers[areaId].m_layerBits = gQuickplayParms.BootAreaLayerFlags;
 	}
 	
 	pArea->StartStreamIn(StateMgr);
