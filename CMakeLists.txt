@@ -22,4 +22,4 @@ patch_function("CMainFlow::AdvanceGameState(CArchitectureQueue&)" "Hook_CMainFlo
 patch_function("CStateManager::InitializeState(uint, TAreaId, uint)" "Hook_CStateManager_InitializeState(CStateManager&, uint, TAreaId, uint)")
 patch_function("CGameArea::StartStreamIn(CStateManager&)" "Hook_CGameArea_StartStreamIn(CGameArea*, CStateManager&)")
 
-add_prime_library(quickplay Source/QuickplaySymbols.lst default.dol ${SOURCE_FILES})
+add_echoes_library(quickplay prime-practice-native/PrimeAPI2/python/symbols/v1.028.lst default.dol ${SOURCE_FILES})

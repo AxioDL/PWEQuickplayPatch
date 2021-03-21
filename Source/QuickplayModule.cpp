@@ -13,10 +13,10 @@
 #include <os.h>
 
 extern "C" {
-void _prolog();
 void *memcpy(void *dest, const void *src, size_t count);
-}
 
+__attribute__((visibility("default"))) extern void __rel_prolog();
+}
 
 // IMPORTANT NOTE: Most of the values, enums & structs declared here
 // are mirrored in Prime World Editor NDolphinIntegration.h.
@@ -61,7 +61,7 @@ SQuickplayParms gQuickplayParms;
 void LoadDebugParamsFromDisc();
 
 // Module init
-void _prolog()
+__attribute__((visibility("default"))) void __rel_prolog()
 {
 	MODULE_INIT;
 	OSReport("Quickplay module loaded\n");
@@ -162,7 +162,6 @@ void Hook_CMainFlow_AdvanceGameState(CMainFlow* pMainFlow, CArchitectureQueue& Q
 		pMainFlow->GetGameState() == kCFS_PreFrontEnd)
 	{
 		sHasDoneInitialBoot = true;
-		OSReport("Hook_CMainFlow_AdvanceGameState\n");
 		g_GameState->SetCurrentWorldId( gQuickplayParms.BootWorldAssetID );
 		g_GameState->CurrentWorldState().SetDesiredAreaAssetId( gQuickplayParms.BootAreaAssetID );
 		pMainFlow->SetGameState(kCFS_Game, Queue);
@@ -183,10 +182,9 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 	StateMgr.InitializeState(WorldAssetId, AreaId, AreaAssetId);
 	CStateManager::EInitPhase Phase = StateMgr.GetInitPhase();
 	
-	if (!sDoneFirstInit && Phase == CStateManager::kInit_Done)
+	if (!sDoneFirstInit && Phase == 3)
 	{
 		sDoneFirstInit = true;
-		OSReport("Hook_CStateManager_InitializeState\n");
 		
 		// Spawn the player in the location specified by SpawnTransform.
 		// This feature doesn't make much sense without JumpToArea, so we require that flag to be on too.
@@ -203,6 +201,10 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 			for (uint ItemIdx = 0; ItemIdx < CPlayerState::kItem_Max; ItemIdx++)
 			{
 				CPlayerState::EItemType Item = (CPlayerState::EItemType) ItemIdx;
+				#if PRIME > 1
+				if (gkPowerUpShouldPersist[ItemIdx] == 0)
+					continue;
+				#endif
 				uint32 Max = gkPowerUpMaxValues[ItemIdx];
 				pPlayerState->ReInitializePowerUp(Item, Max);
 				pPlayerState->IncrPickUp(Item, Max);
@@ -214,7 +216,7 @@ void Hook_CStateManager_InitializeState(CStateManager& StateMgr, uint WorldAsset
 void Hook_CGameArea_StartStreamIn(CGameArea* pArea, CStateManager& StateMgr)
 {
 	static bool sFirstLoad = false;
-	
+
 	// Hook into the first time StartStreamIn is called to make sure that
 	// all layer flags we want enabled are set.
 	// This feature also requires JumpToArea enabled.
@@ -231,9 +233,11 @@ void Hook_CGameArea_StartStreamIn(CGameArea* pArea, CStateManager& StateMgr)
 		TAreaId areaId = pWorld->GetAreaId(gQuickplayParms.BootAreaAssetID);
 		OSReport("Hook_CGameArea_StartStreamIn 3: %d\n", areaId.id);
 		
-		CWorldLayerState* pWorldLayerState = *g_GameState->CurrentWorldState().layerState;
+		auto pWorldLayerState = g_GameState->CurrentWorldState().layerState.RawPointer();
 		OSReport("Hook_CGameArea_StartStreamIn 4: %p\n", pWorldLayerState);
 		pWorldLayerState->areaLayers[areaId].m_layerBits = gQuickplayParms.BootAreaLayerFlags;
+
+		OSReport("Hook_CGameArea_StartStreamIn 5\n");
 	}
 	
 	pArea->StartStreamIn(StateMgr);
