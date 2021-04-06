@@ -1,4 +1,4 @@
 [submodule "prime-practice-native"]
 	path = prime-practice-native
-	url = https://github.com/MetroidPrimeModding/prime-practice-native
-	branch = cmake-rewrite
+	url = https://github.com/henriquegemignani/prime-practice-native.git
+	branch = prime2-support
