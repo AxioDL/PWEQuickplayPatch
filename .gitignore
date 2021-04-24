@@ -1,3 +1,4 @@
 *.dol
 /Source/build/
 /build
+/.vscode
