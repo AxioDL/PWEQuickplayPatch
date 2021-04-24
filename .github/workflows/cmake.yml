@@ -18,7 +18,12 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    
+
+    - name: Decrypt large secrets
+      run: gpg --quiet --batch --yes --decrypt --passphrase="$SECRETS_PASSPHRASE" .github/secrets.tar.gz.gpg | tar -zx
+      env:
+        SECRETS_PASSPHRASE: ${{ secrets.SECRETS_PASSPHRASE }}
+
     - name: Install LLVM 12 tool
       run: |
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
