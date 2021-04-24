@@ -5,6 +5,7 @@ This is a hack for both Metroid Prime 1 and 2 that integrates with Prime World E
 * Install CMake.
 * Install LLVM 12, with at least clang and lld.
 * Install [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+* Install [devkitPro](https://devkitpro.org/wiki/Getting_Started) with devkitPPC
 
 ## Building
 1. Place `prime1.dol` and/or `echoes.dol` in the repository root.
