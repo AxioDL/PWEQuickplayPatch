@@ -1,0 +1,46 @@
+name: Build
+
+on: [push]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Decrypt large secrets
+      run: gpg --quiet --batch --yes --decrypt --passphrase="$SECRETS_PASSPHRASE" .github/secrets.tar.gz.gpg | tar -zx
+      env:
+        SECRETS_PASSPHRASE: ${{ secrets.SECRETS_PASSPHRASE }}
+
+    - name: Install LLVM 12 tool
+      run: |
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+        echo deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 main | sudo tee /etc/apt/sources.list.d/llvm-12.list
+        sudo apt-get update
+        sudo apt-get install clang-12 lldb-12 lld-12
+
+    - name: Install devkitPro
+      run: |
+        sudo mkdir -p /opt
+        id=$(docker create devkitpro/devkitppc)
+        docker cp $id:/opt/devkitpro - | sudo tar -xvC /opt
+        docker rm -v $id
+
+    - name: Configure CMake
+      run: cmake -B build $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DLLVM_DIR=/usr/lib/llvm-12
+
+    - name: Build
+      run: cmake --build build --config $BUILD_TYPE
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        if-no-files-found: error
+        path: build/*.rel
